@@ -1,0 +1,13 @@
+name: regeq
+author: Teofil Camarasu <teofilcamarasu@gmail.com>
+
+dependencies:
+  - base
+  - containers
+  - pqueue
+  - mtl
+  - parsec
+
+library:
+  source-dirs: src
+
