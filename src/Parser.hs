@@ -1,6 +1,6 @@
 module Parser where
 -- import Control.Applicative
-import Text.Parsec
+import Text.Parsec hiding (Empty)
 import Text.Parsec.Char
 import Data.List ((\\))
 import Data.Functor
@@ -37,15 +37,18 @@ bf f [x]      = [x]
 bf f (x:y:xs) = (f x y):bf f xs
 
 regexp :: Parser (Regex Char)
-regexp =
-          try (Union <$> term <* char '|' <*> regexp)
-      <|> try (Concat <$> term <*> regexp)
-      <|> term
+regexp =  try (Union <$> factor <* char '|' <*> regexp)
+      <|> factor
+
+factor =   try (Concat <$> term <*> factor)
+       <|> term
 
 term :: Parser (Regex Char)
-term =
-           try (Star <$> base <* char '*')
-       <|> base
+term = do
+  b <- base
+  try (char '*' >> return (Star b))
+   <|> try (char '+' >> return (Concat b (Star b)))
+   <|> return b
 
 base :: Parser (Regex Char)
 base =
