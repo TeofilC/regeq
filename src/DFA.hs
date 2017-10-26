@@ -3,48 +3,44 @@ module DFA where
 import Control.Monad
 import qualified Data.PQueue.Min as PQ
 import qualified Data.Set as S
+import qualified Data.Map as M
 import qualified Data.List as L
 import NFA
 import Regex
 
 data DFA s a = DFA { states :: [s]
-                   , delta  :: s -> a -> s
+                   , delta  :: M.Map (s, a) s -- s -> a -> s
                    , start  :: s
                    , accept :: [s]
                    }
 
-class Alphabet a where
-  alphabet :: [a]
 
-instance Alphabet Char where
-  alphabet = enumFromTo (toEnum 0) (toEnum 256)
-
-determinise :: (Alphabet a, Ord s) => NFA s a -> DFA [s] a
+determinise :: (Alphabet a, Ord s, Ord a) => NFA s a -> DFA [s] a
 determinise NFA {..} = DFA { states = states'
-                            , delta  = delta'
+                            , delta  = M.fromList [((s,a), delta' s a) | s <- states', a <- alphabet]
                             , start = [start]
                             , accept = filter (\s -> not . S.null $ S.fromList s `S.intersection` S.fromList accept) states'
                             }
   where
-    delta' sz a = sz >>= \s -> delta s a
+    delta' sz a = sz >>= \s -> M.findWithDefault [] (s,a) delta
     states' = closure (\s -> map (\a -> delta' s a) alphabet) (S.singleton [start])
     powerset [] = [[]]
     powerset (x:xs) = let rs = powerset xs in map (x:) rs ++ rs
 
-toDFA :: (Alphabet a, Eq a) => Regex a -> DFA [Int] a
+toDFA :: (Alphabet a, Eq a, Ord a) => Regex a -> DFA [Int] a
 toDFA = determinise . deEpsilon . toNFAe
 
-symmetricDiff :: (Eq s1, Eq s2) => DFA s1 a -> DFA s2 a -> DFA (s1,s2) a
+symmetricDiff :: (Alphabet a, Eq s1, Eq s2, Monoid s1, Monoid s2, Ord s1, Ord s2, Ord a) => DFA s1 a -> DFA s2 a -> DFA (s1,s2) a
 symmetricDiff DFA {states = s1, delta = d1, start = q1, accept = a1}
               DFA {states = s2, delta = d2, start = q2, accept = a2} =
   DFA { states = liftM2 (,) s1 s2
-      , delta  = \(x1,x2) a -> (d1 x1 a, d2 x2 a)
+      , delta  = M.fromList [(((x1,x2),a), (M.findWithDefault mempty (x1, a) d1, M.findWithDefault mempty (x2, a) d2)) | x1 <- s1, x2 <- s2, a <- alphabet]
       , start  = (q1,q2)
       , accept = [(x,y) | x <- s1, y <- s2, not (x `elem` a1 && y `elem` a2), (x `elem` a1 || y `elem` a2)]
       }
 
-shortestWord :: (Alphabet a, Ord a, Ord s) => DFA s a -> Maybe [a]
-shortestWord DFA {..} = shortestPath (PQ.singleton (0,start,[])) S.empty delta accept
+shortestWord :: (Alphabet a, Ord a, Ord s, Monoid s) => DFA s a -> Maybe [a]
+shortestWord DFA {..} = shortestPath (PQ.singleton (0,start,[])) S.empty (\s a -> M.findWithDefault mempty (s,a) delta) accept
 
 shortestPath :: (Alphabet a, Ord s, Ord a) => PQ.MinQueue (Int, s, [a]) -> S.Set s -> (s -> a -> s) -> [s] -> Maybe [a]
 shortestPath pq vis d target = case PQ.minView pq of
