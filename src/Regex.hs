@@ -3,7 +3,8 @@ module Regex where
 import Control.Monad.State
 import NFA
 
-data Regex a = Sym a
+data Regex a = Empty
+             | Sym a
              | Union  (Regex a) (Regex a)
              | Concat (Regex a) (Regex a)
              | Star   (Regex a)
@@ -19,10 +20,21 @@ toNFAe :: (Eq a) => Regex a -> NFAe Int a
 toNFAe = flip evalState 0 . unGen . toNFAe'
 
 toNFAe' :: (Eq a) => Regex a -> Gen (NFAe Int a)
-toNFAe' (Sym a) = next >>= \start -> next >>= \end ->
+toNFAe' Empty = do
+  start <- next
+  end   <- next
+  let deltae s Nothing = if s == start then [end] else []
+      deltae _    _        = []
+  return $ NFAe { statese = [start, end]
+                , deltae  = deltae
+                , starte  = start
+                , accepte = [end]
+                }
+toNFAe' (Sym a) = do
+  start <- next
+  end   <- next
   let deltae s (Just x) = if s == start && x == a then [end] else []
       deltae _    _        = []
-  in
   return $ NFAe { statese = [start, end]
                 , deltae  = deltae
                 , starte  = start
@@ -58,4 +70,4 @@ toNFAe' (Star r) = do
   return $ NFAe { statese = statese r'
                 , deltae  = delta
                 , starte  = starte r'
-                , accepte = starte r':accepte r'}
+                , accepte = [starte r']}

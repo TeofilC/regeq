@@ -4,6 +4,7 @@ import Control.Monad
 import qualified Data.PQueue.Min as PQ
 import qualified Data.Set as S
 import qualified Data.List as L
+import Data.List (sort)
 import NFA
 import Regex
 
@@ -17,7 +18,7 @@ class Alphabet a where
   alphabet :: [a]
 
 instance Alphabet Char where
-  alphabet = enumFromTo (toEnum 0) (toEnum 256)
+  alphabet = enumFromTo '!' (toEnum 126)
 
 determinise :: (Alphabet a, Ord s) => NFA s a -> DFA [s] a
 determinise NFA {..} = DFA { states = states'
@@ -26,8 +27,8 @@ determinise NFA {..} = DFA { states = states'
                             , accept = filter (\s -> not . S.null $ S.fromList s `S.intersection` S.fromList accept) states'
                             }
   where
-    delta' sz a = sz >>= \s -> delta s a
-    states' = closure (\s -> map (\a -> delta' s a) alphabet) (S.singleton [start])
+    delta' sz a = S.toList $ S.fromList (sz >>= \s -> delta s a)
+    states' = closure (\s -> map (delta' s) alphabet) (S.singleton [start])
     powerset [] = [[]]
     powerset (x:xs) = let rs = powerset xs in map (x:) rs ++ rs
 
