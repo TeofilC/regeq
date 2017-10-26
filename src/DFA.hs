@@ -5,6 +5,7 @@ import qualified Data.PQueue.Min as PQ
 import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified Data.List as L
+import Data.List (sort)
 import NFA
 import Regex
 
@@ -15,19 +16,19 @@ data DFA s a = DFA { states :: [s]
                    }
 
 
-determinise :: (Alphabet a, Ord s, Ord a) => NFA s a -> DFA [s] a
+determinise :: (Alphabet a, Ord s, Ord a) => NFA s a -> DFA (S.Set s) a
 determinise NFA {..} = DFA { states = states'
                             , delta  = M.fromList [((s,a), delta' s a) | s <- states', a <- alphabet]
-                            , start = [start]
-                            , accept = filter (\s -> not . S.null $ S.fromList s `S.intersection` S.fromList accept) states'
+                            , start = S.singleton start
+                            , accept = filter (\s -> not . S.null $ s `S.intersection` S.fromList accept) states'
                             }
   where
-    delta' sz a = sz >>= \s -> M.findWithDefault [] (s,a) delta
-    states' = closure (\s -> map (\a -> delta' s a) alphabet) (S.singleton [start])
+    delta' sz a = S.fromList (S.toList sz >>= \s -> M.findWithDefault [] (s,a) delta)
+    states' = closure (\s -> map (\a -> delta' s a) alphabet) (S.singleton $ S.singleton start)
     powerset [] = [[]]
     powerset (x:xs) = let rs = powerset xs in map (x:) rs ++ rs
 
-toDFA :: (Alphabet a, Eq a, Ord a) => Regex a -> DFA [Int] a
+toDFA :: (Alphabet a, Eq a, Ord a) => Regex a -> DFA (S.Set Int) a
 toDFA = determinise . deEpsilon . toNFAe
 
 symmetricDiff :: (Alphabet a, Eq s1, Eq s2, Monoid s1, Monoid s2, Ord s1, Ord s2, Ord a) => DFA s1 a -> DFA s2 a -> DFA (s1,s2) a
