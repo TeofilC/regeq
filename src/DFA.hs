@@ -4,8 +4,6 @@ import Control.Monad
 import qualified Data.PQueue.Min as PQ
 import qualified Data.Set as S
 import qualified Data.Map as M
-import qualified Data.List as L
-import Data.List (sort)
 import NFA
 import Regex
 
@@ -17,14 +15,24 @@ data DFA s a = DFA { states :: [s]
 
 
 determinise :: (Alphabet a, Ord s, Ord a) => NFA s a -> DFA (S.Set s) a
-determinise NFA {..} = DFA { states = states'
-                            , delta  = M.fromList [((s,a), delta' s a) | s <- states', a <- alphabet]
+determinise NFA {..} = DFA { states = S.toList states'
+                            , delta  = delta'
                             , start = S.singleton start
-                            , accept = filter (\s -> not . S.null $ s `S.intersection` S.fromList accept) states'
+                            , accept = filter (\s -> not . S.null $ s `S.intersection` S.fromList accept) (S.toList states')
                             }
   where
-    delta' sz a = S.fromList (S.toList sz >>= \s -> M.findWithDefault [] (s,a) delta)
-    states' = closure (\s -> map (\a -> delta' s a) alphabet) (S.singleton $ S.singleton start)
+    (delta',states') = explore (S.singleton start) (M.empty, S.empty)
+    -- olddelta :: M.Map s (M.Map a (S.Set s))
+    olddelta = M.fromListWith (M.unionWith S.union) . map (\((s,a),x) -> (s, M.singleton a (S.fromList x))) . M.toList $ delta
+    -- neighbours :: S.Set s -> M.Map a (S.Set s)
+    neighbours s = foldr (\a b -> M.unionWith (S.union) b $ M.findWithDefault (M.empty) a olddelta) M.empty (S.toList s)
+    -- explore :: S.Set s -> M.Map (S.Set s, a) (S.Set s) -> M.Map (S.Set s, a) (S.Set s)
+    explore s (d,vis) = foldr (explore) (d',vis') (S.toList ((S.fromList $ M.elems n) `S.difference` vis))
+      where
+        n = neighbours s
+        vis' = S.insert s vis
+        d' = M.unionWith (S.union) d (M.fromList . map (\(a,x) -> ((s,a),x)) . M.toList $ n)
+
     powerset [] = [[]]
     powerset (x:xs) = let rs = powerset xs in map (x:) rs ++ rs
 
